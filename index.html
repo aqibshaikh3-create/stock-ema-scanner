@@ -6,19 +6,19 @@
     <title>EMA Crossover Filter Dashboard</title>
     <script src="https://tailwindcss.com"></script>
 </head>
-<body class="bg-gray-900 text-gray-100 font-sans min-h-screen">
+<body class="bg-gray-900 text-white font-sans p-6 min-h-screen">
 
-    <div class="container mx-auto px-4 py-8 max-w-5xl">
-        <header class="mb-8 border-b border-gray-800 pb-6">
-            <h1 class="text-3xl font-extrabold text-teal-400">📊 Premium Market-Wide Stock Filter</h1>
-            <p class="text-gray-400 mt-2 text-sm">Showing all dynamically scanned NSE stocks that maintained a strict 100% win-rate profile (>5% gain post golden-cross) over the last 3 rolling years. Updated daily at 5:00 PM IST.</p>
+    <div class="max-w-5xl mx-auto">
+        <header class="mb-6 pb-4 border-b border-gray-800">
+            <h1 class="text-3xl font-extrabold text-teal-400">📊 Premium Stock Crossover Filter</h1>
+            <p class="text-gray-400 text-sm mt-1">Scanning 3 years of daily historical data for active NSE stocks. Updated daily at 5:00 PM IST.</p>
         </header>
 
         <!-- Main Display Table Card -->
-        <div class="bg-gray-800 rounded-xl shadow-xl overflow-hidden border border-gray-700">
+        <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700 overflow-hidden">
             <table class="w-full text-left border-collapse">
                 <thead>
-                    <tr class="bg-gray-700/50 text-gray-300 text-xs font-semibold uppercase tracking-wider">
+                    <tr class="bg-gray-700 text-gray-200 text-xs font-semibold uppercase tracking-wider">
                         <th class="p-4">Trading Symbol</th>
                         <th class="p-4 text-center">20 & 50 EMA Strategy</th>
                         <th class="p-4 text-center">Total 20/50 Crosses</th>
@@ -26,9 +26,9 @@
                         <th class="p-4 text-center">Total 100/200 Crosses</th>
                     </tr>
                 </thead>
-                <tbody id="stock-table-rows" class="divide-y divide-gray-700 text-sm">
+                <tbody id="stock-table-rows" class="text-sm divide-y divide-gray-700">
                     <tr>
-                        <td colspan="5" class="p-8 text-center text-gray-500 animate-pulse">Fetching latest processed signals from market scan...</td>
+                        <td colspan="5" class="p-8 text-center text-gray-400 font-medium">⏳ Fetching latest data snapshot from the server...</td>
                     </tr>
                 </tbody>
             </table>
@@ -36,80 +36,37 @@
     </div>
 
     <script>
-        // Force bypass browser caching using a random time variable
-        fetch('./data.json?t=' + new Date().getTime())
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error("Data file not deployed on server yet");
-                }
-                return response.json();
-            })
+        // Use a clean URL without aggressive error handlers to prevent dashboard freezes
+        fetch('data.json')
+            .then(res => res.json())
             .then(data => {
                 const tbody = document.getElementById('stock-table-rows');
-                tbody.innerHTML = ''; 
+                tbody.innerHTML = ''; // Clear loading row
 
                 if (!data || data.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-400 font-medium">⚠️ No stocks currently meet the strict 100% win-rate profile criteria from today's scan.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-400">⚠️ No stocks currently meet the strict 100% win-rate crossover criteria. Check back after market close.</td></tr>`;
                     return;
                 }
 
                 data.forEach(stock => {
-                    const badge20_50 = stock.cross_20_50 === 'PASSED' ? 'bg-green-500/20 text-green-400 font-bold' : 'bg-red-500/10 text-gray-500';
-                    const badge100_200 = stock.cross_100_200 === 'PASSED' ? 'bg-green-500/20 text-green-400 font-bold' : 'bg-red-500/10 text-gray-500';
+                    const badge20_50 = stock.cross_20_50 === 'PASSED' ? 'bg-green-500/20 text-green-400 font-bold' : 'bg-gray-700 text-gray-500';
+                    const badge100_200 = stock.cross_100_200 === 'PASSED' ? 'bg-green-500/20 text-green-400 font-bold' : 'bg-gray-700 text-gray-500';
 
                     const row = `
-                        <tr class="hover:bg-gray-700/30 transition-colors">
-                            <td class="p-4 font-bold text-white tracking-wide">${stock.symbol}</td>
-                            <td class="p-4 text-center"><span class="px-3 py-1 rounded-full text-xs font-medium ${badge20_50}">${stock.cross_20_50}</span></td>
+                        <tr class="hover:bg-gray-750">
+                            <td class="p-4 font-bold text-white">${stock.symbol}</td>
+                            <td class="p-4 text-center"><span class="px-3 py-1 rounded text-xs ${badge20_50}">${stock.cross_20_50}</span></td>
                             <td class="p-4 text-center font-mono text-gray-300">${stock.count_20_50}</td>
-                            <td class="p-4 text-center"><span class="px-3 py-1 rounded-full text-xs font-medium ${badge100_200}">${stock.cross_100_200}</span></td>
+                            <td class="p-4 text-center"><span class="px-3 py-1 rounded text-xs ${badge100_200}">${stock.cross_100_200}</span></td>
                             <td class="p-4 text-center font-mono text-gray-300">${stock.count_100_200}</td>
                         </tr>
                     `;
                     tbody.innerHTML += row;
                 });
             })
-            .catch(error => {
-                console.error("Tracking failure:", error);
-                // Fallback display message to show while GitHub Pages finishes syncing files
-                document.getElementById('stock-table-rows').innerHTML = `<tr><td colspan="5" class="p-8 text-center text-amber-400 bg-amber-500/5">⚙️ GitHub Pages is currently syncing your data changes. Please hard-refresh (Ctrl + F5) this page in 60 seconds.</td></tr>`;
-            });
-    </script>
-</body>
-</html>
-
-    <script>
-        // Fetch raw data generated by Python execution script dynamically
-        fetch('./data.json')
-            .then(response => response.json())
-            .then(data => {
-                const tbody = document.getElementById('stock-table-rows');
-                tbody.innerHTML = ''; // Wipe out loading message
-
-                if (data.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-400">No stocks currently meet the >5% multi-year crossover criteria.</td></tr>`;
-                    return;
-                }
-
-                data.forEach(stock => {
-                    const badge20_50 = stock.cross_20_50 === 'PASSED' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/10 text-gray-500';
-                    const badge100_200 = stock.cross_100_200 === 'PASSED' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/10 text-gray-500';
-
-                    const row = `
-                        <tr class="hover:bg-gray-750 transition-colors">
-                            <td class="p-4 font-bold text-white tracking-wide">${stock.symbol}</td>
-                            <td class="p-4 text-center"><span class="px-3 py-1 rounded-full text-xs font-medium ${badge20_50}">${stock.cross_20_50}</span></td>
-                            <td class="p-4 text-center font-mono text-gray-300">${stock.count_20_50}</td>
-                            <td class="p-4 text-center"><span class="px-3 py-1 rounded-full text-xs font-medium ${badge100_200}">${stock.cross_100_200}</span></td>
-                            <td class="p-4 text-center font-mono text-gray-300">${stock.count_100_200}</td>
-                        </tr>
-                    `;
-                    tbody.innerHTML += row;
-                });
-            })
-            .catch(error => {
-                console.error("Data tracking failure:", error);
-                document.getElementById('stock-table-rows').innerHTML = `<tr><td colspan="5" class="p-8 text-center text-red-400">Error loading dashboard content files. Check back shortly.</td></tr>`;
+            .catch(err => {
+                console.error(err);
+                document.getElementById('stock-table-rows').innerHTML = `<tr><td colspan="5" class="p-8 text-center text-yellow-400 font-semibold">⚙️ Data file synchronization in progress. Please refresh this page in a minute.</td></tr>`;
             });
     </script>
 </body>
