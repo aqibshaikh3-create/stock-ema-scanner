@@ -1,18 +1,18 @@
 name: Run Daily Stock Scanner
 on:
   schedule:
-    - cron: '30 11 * * 1-5' # Triggers automatically Monday-Friday at 5:00 PM IST (11:30 AM UTC)
-  workflow_dispatch: # Allows you to manually trigger it with a button click anytime
+    - cron: '30 11 * * 1-5' # Triggers automatically Monday-Friday at 5:00 PM IST
+  workflow_dispatch: # Allows manual trigger button clicks
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Repository Files
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4 # Upgraded from v3 to fix the deprecation warning
 
     - name: Configure Python runtime environment
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5 # Upgraded from v4 to fix the deprecation warning
       with:
         python-version: '3.10'
 
@@ -25,11 +25,3 @@ jobs:
       env:
         UPSTOX_ANALYTICS_TOKEN: ${{ secrets.UPSTOX_ANALYTICS_TOKEN }}
       run: python updater.py
-
-    - name: Commit Updated Signals to Live Web Server
-      run: |
-        git config --global user.name "GitHub Automation Engine"
-        git config --global user.email "automated-bot@github.com"
-        git add data.json
-        git commit -m "Automated Refresh: Updated EMA Crossover List [skip ci]" || exit 0
-        git push origin main
