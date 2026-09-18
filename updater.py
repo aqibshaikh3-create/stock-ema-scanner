@@ -46,7 +46,7 @@ def verify_strict_ema_strategy(df, fast, slow):
         remaining_data = df.loc[idx:]
         death_cross = remaining_data[remaining_data['crossover'] == -1]
         if not death_cross.empty:
-            trade_window = df.loc[idx:death_cross.index[0]]
+            trade_window = df.loc[idx:death_cross.index]
         else:
             trade_window = remaining_data
         max_return = ((trade_window['high'].max() - entry_price) / entry_price) * 100
@@ -59,15 +59,26 @@ if __name__ == "__main__":
     if not ANALYTICS_TOKEN:
         print("Missing token")
         exit(1)
+        
     filtered_output = []
     try:
-        json_gz_url = "https://upstox.com"
-        response = requests.get(json_gz_url, timeout=30)
+        json_gz_url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
+        
+        # We supply custom headers so Upstox doesn't reject the virtual script as an unrecognized bot
+        browser_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        
+        response = requests.get(json_gz_url, headers=browser_headers, timeout=30)
+        
         if response.status_code == 200:
             all_instruments = json.loads(gzip.decompress(response.content))
             nse_equities = [i for i in all_instruments if i.get('exchange') == 'NSE' and i.get('instrument_type') == 'EQ' and i.get('segment') == 'NSE_EQ']
+            
+            # Select up to 200 key assets to fit cleanly within free workflow execution boundaries
             target_batch = nse_equities[:200]
             print(f"Scanning {len(target_batch)} active stocks...")
+            
             for stock in target_batch:
                 key = stock.get('instrument_key')
                 sym = stock.get('tradingsymbol')
@@ -86,9 +97,14 @@ if __name__ == "__main__":
                             "count_100_200": c_100_200
                         })
                 time.sleep(0.12)
+        else:
+            print(f"Failed to fetch file stream from Upstox Server. HTTP Status: {response.status_code}")
+            exit(1)
+            
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error during network extraction sequence: {e}")
         exit(1)
+        
     with open("data.json", "w") as f:
         json.dump(filtered_output, f, indent=4)
     print("Market scan finished successfully.")
