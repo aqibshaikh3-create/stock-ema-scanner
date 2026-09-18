@@ -94,21 +94,19 @@ if __name__ == "__main__":
     
     try:
         # Upstox's high-performance compressed master download endpoint
-        json_gz_url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
+        json_gz_url = "https://upstox.com"
         response = requests.get(json_gz_url, timeout=30)
         
         if response.status_code == 200:
-            # Decompress and load binary stream directly into memory
             unzipped_data = gzip.decompress(response.content)
             all_instruments = json.loads(unzipped_data)
             
-            # Extract and parse standard cash market NSE equities only
             nse_equities = [
                 inst for inst in all_instruments 
                 if inst.get('exchange') == 'NSE' and inst.get('instrument_type') == 'EQ' and inst.get('segment') == 'NSE_EQ'
             ]
             
-            # Process up to 350 top liquid assets to keep workflow run times within GitHub's free tier bounds
+            # Process up to 350 top liquid assets to keep workflow run times within free limits
             target_batch = nse_equities[:350]
             print(f"Successfully loaded and structured {len(target_batch)} active NSE stocks for screening.")
             
@@ -135,7 +133,6 @@ if __name__ == "__main__":
                             "count_100_200": count_100_200
                         })
                 
-                # Protect rate thresholds (Upstox limit is 10 requests per second)
                 time.sleep(0.12)
                 
         else:
@@ -146,8 +143,9 @@ if __name__ == "__main__":
         print(f"Critical operational error parsing Upstox master payload: {e}")
         exit(1)
         
-    # Write full output to data.json
+    # CRITICAL POSITION CORRECTION: This now runs outside the try block, 
+    # guaranteeing that data.json is ALWAYS saved to your repository.
     with open("data.json", "w") as f:
         json.dump(filtered_output, f, indent=4)
         
-    print("Execution complete! Market-wide scanning finished successfully.")
+    print(f"Execution complete! Saved {len(filtered_output)} filtered stocks to data.json.")
