@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import gzip
 import requests
 import pandas as pd
 import numpy as np
@@ -9,7 +10,7 @@ import numpy as np
 API_BASE_URL = "https://upstox.com"
 INTERVAL = "1day"
 
-# Dynamically calculate rolling 3-year timeline
+# Dynamically calculate trailing 3-year timeline
 TO_DATE = pd.Timestamp.now().strftime('%Y-%m-%d')
 FROM_DATE = (pd.Timestamp.now() - pd.DateOffset(years=3)).strftime('%Y-%m-%d')
 
@@ -67,7 +68,7 @@ def verify_strict_ema_strategy(df, fast, slow):
         death_cross = remaining_data[remaining_data['crossover'] == -1]
         
         if not death_cross.empty:
-            exit_idx = death_cross.index[0]
+            exit_idx = death_cross.index
             trade_window = df.loc[idx:exit_idx]
         else:
             trade_window = remaining_data # Trade is active up to the present day
@@ -88,51 +89,65 @@ if __name__ == "__main__":
         print("Execution Halted: UPSTOX_ANALYTICS_TOKEN secret environment variable is missing!")
         exit(1)
 
-    print("Fetching complete active NSE Equity list from Upstox Master File...")
+    print("Fetching full production market instrument dictionary from Upstox (JSON GZ format)...")
     filtered_output = []
     
     try:
-        # Download Upstox's daily master sheet of all instruments
-        master_url = "https://upstox.com"
-        df_master = pd.read_csv(master_url)
+        # Upstox's high-performance compressed master download endpoint
+        json_gz_url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
+        response = requests.get(json_gz_url, timeout=30)
         
-        # Filter down strictly to standard corporate equity stocks (removes options, futures, and indices)
-        df_equities = df_master[(df_master['instrument_type'] == 'EQUITY') & (df_master['segment'] == 'NSE_EQ')]
-        
-        # Target the top 250 liquid stocks to keep execution within GitHub's free time limits
-        df_target = df_equities.head(250) 
-        print(f"Successfully identified {len(df_target)} active stocks to scan today.")
-        
-        for index, row in df_target.iterrows():
-            instrument_key = row['instrument_key']
-            symbol = row['tradingsymbol']
+        if response.status_code == 200:
+            # Decompress and load binary stream directly into memory
+            unzipped_data = gzip.decompress(response.content)
+            all_instruments = json.loads(unzipped_data)
             
-            print(f"Analyzing {symbol}...")
-            historical_df = fetch_historical_candles(instrument_key)
+            # Extract and parse standard cash market NSE equities only
+            nse_equities = [
+                inst for inst in all_instruments 
+                if inst.get('exchange') == 'NSE' and inst.get('instrument_type') == 'EQ' and inst.get('segment') == 'NSE_EQ'
+            ]
             
-            if historical_df is not None:
-                passed_20_50, count_20_50 = verify_strict_ema_strategy(historical_df.copy(), 20, 50)
-                passed_100_200, count_100_200 = verify_strict_ema_strategy(historical_df.copy(), 100, 200)
+            # Process up to 350 top liquid assets to keep workflow run times within GitHub's free tier bounds
+            target_batch = nse_equities[:350]
+            print(f"Successfully loaded and structured {len(target_batch)} active NSE stocks for screening.")
+            
+            for stock in target_batch:
+                instrument_key = stock.get('instrument_key')
+                symbol = stock.get('tradingsymbol')
                 
-                # Save the stock if it passed either of your strict parameters
-                if passed_20_50 or passed_100_200:
-                    filtered_output.append({
-                        "symbol": symbol,
-                        "cross_20_50": "PASSED" if passed_20_50 else "FAILED",
-                        "count_20_50": count_20_50,
-                        "cross_100_200": "PASSED" if passed_100_200 else "FAILED",
-                        "count_100_200": count_100_200
-                    })
-            
-            # Rate limiting safety cushion (Max 10 requests per second allowed by Upstox)
-            time.sleep(0.12)
+                if not instrument_key or not symbol:
+                    continue
+                    
+                print(f"Scanning metrics for: {symbol}...")
+                historical_df = fetch_historical_candles(instrument_key)
+                
+                if historical_df is not None:
+                    passed_20_50, count_20_50 = verify_strict_ema_strategy(historical_df.copy(), 20, 50)
+                    passed_100_200, count_100_200 = verify_strict_ema_strategy(historical_df.copy(), 100, 200)
+                    
+                    if passed_20_50 or passed_100_200:
+                        filtered_output.append({
+                            "symbol": symbol,
+                            "cross_20_50": "PASSED" if passed_20_50 else "FAILED",
+                            "count_20_50": count_20_50,
+                            "cross_100_200": "PASSED" if passed_100_200 else "FAILED",
+                            "count_100_200": count_100_200
+                        })
+                
+                # Protect rate thresholds (Upstox limit is 10 requests per second)
+                time.sleep(0.12)
+                
+        else:
+            print(f"Failed to fetch file stream from Upstox Server. HTTP Status: {response.status_code}")
+            exit(1)
             
     except Exception as e:
-        print(f"Failed to fetch or parse Upstox Instrument Master file: {e}")
+        print(f"Critical operational error parsing Upstox master payload: {e}")
         exit(1)
         
-    # Write structural flat file payload back onto disk environment
+    # Write full output to data.json
     with open("data.json", "w") as f:
         json.dump(filtered_output, f, indent=4)
         
-    print("Execution complete! data.json successfully updated for all matching stocks.")
+    print("Execution complete! Market-wide scanning finished successfully.")
